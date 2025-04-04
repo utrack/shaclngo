@@ -1,0 +1,120 @@
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix ex: <http://example.org/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# Person with a list of interests (RDF Collection - ordered)
+ex:Person1 
+    a ex:Person ;
+    rdfs:label "John Doe" ;
+    ex:age "30"^^xsd:integer ;
+    ex:interests (
+        "Programming"
+        "Reading"
+        "Hiking"
+    ) .
+
+# Person with a bag of skills (RDF Container - unordered)
+ex:Person2
+    a ex:Person ;
+    rdfs:label "Jane Smith" ;
+    ex:age "28"^^xsd:integer ;
+    ex:skills [
+        a rdf:Bag ;
+        rdf:_1 "Python" ;
+        rdf:_2 "Go" ;
+        rdf:_3 "JavaScript" ;
+    ] .
+
+# Person with a sequence of previous jobs (RDF Container - ordered)
+ex:Person3
+    a ex:Person ;
+    rdfs:label "Bob Johnson" ;
+    ex:age "35"^^xsd:integer ;
+    ex:previousJobs [
+        a rdf:Seq ;
+        rdf:_1 "Software Engineer" ;
+        rdf:_2 "Senior Developer" ;
+        rdf:_3 "Tech Lead" ;
+    ] .
+
+# Person with alternative contact methods (RDF Container - alternatives)
+ex:Person4
+    a ex:Person ;
+    rdfs:label "Alice Williams" ;
+    ex:age "32"^^xsd:integer ;
+    ex:contactMethods [
+        a rdf:Alt ;
+        rdf:_1 "email: alice@example.com" ;
+        rdf:_2 "phone: +1-555-123-4567" ;
+        rdf:_3 "twitter: @alicew" ;
+    ] .
+
+# Team with a collection of Person references
+ex:Team1
+    a ex:Team ;
+    rdfs:label "Development Team" ;
+    ex:members (
+        ex:Person1
+        ex:Person2
+        ex:Person3
+        ex:Person4
+    ) .
+
+# Nested collections example
+ex:Project1
+    a ex:Project ;
+    rdfs:label "Web Application" ;
+    ex:teamMembers (
+        [
+            a ex:Person ;
+            rdfs:label "Eve Brown" ;
+            ex:role "Frontend Developer" ;
+            ex:skills (
+                "HTML"
+                "CSS"
+                "JavaScript"
+            )
+        ]
+        [
+            a ex:Person ;
+            rdfs:label "Charlie Davis" ;
+            ex:role "Backend Developer" ;
+            ex:skills (
+                "Go"
+                "SQL"
+                "Docker"
+            )
+        ]
+    ) .
+
+# Mixed collection and container
+ex:Department1
+    a ex:Department ;
+    rdfs:label "Engineering" ;
+    ex:manager [
+        a ex:Person ;
+        rdfs:label "Dave Wilson" ;
+        ex:teams (
+            [
+                a ex:Team ;
+                rdfs:label "Frontend" ;
+                ex:members [
+                    a rdf:Bag ;
+                    rdf:_1 "Alice" ;
+                    rdf:_2 "Bob" ;
+                    rdf:_3 "Charlie" ;
+                ]
+            ]
+            [
+                a ex:Team ;
+                rdfs:label "Backend" ;
+                ex:members [
+                    a rdf:Bag ;
+                    rdf:_1 "Dave" ;
+                    rdf:_2 "Eve" ;
+                    rdf:_3 "Frank" ;
+                ]
+            ]
+        )
+    ] .
