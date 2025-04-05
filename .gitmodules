@@ -1,3 +1,9 @@
 [submodule "data-shapes"]
 	path = data-shapes
 	url = https://github.com/w3c/data-shapes.git
+[submodule "rdft/turtle-tests-w3c-mirror"]
+	path = rdft/turtle-tests-w3c-mirror
+	url = https://github.com/dajobe/turtle-tests-w3c-mirror.git
+[submodule "rdft/testfiles/turtle-tests-w3c-mirror"]
+	path = rdft/testfiles/turtle-tests-w3c-mirror
+	url = https://github.com/dajobe/turtle-tests-w3c-mirror.git
