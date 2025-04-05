@@ -3,8 +3,8 @@ package rdft_test
 import (
 	"fmt"
 	"os"
-	"testing"
 	"strings"
+	"testing"
 
 	"github.com/deiu/rdf2go"
 	"github.com/utrack/shaclngo/rdft"
@@ -12,21 +12,21 @@ import (
 
 // Example struct representing a Rectangle from the SHACL test
 type Rectangle struct {
-	URI    rdft.Resource   `rdf:"@id"`
-	Type   rdft.Resource   `rdf:"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"`
-	Width  int            `rdf:"http://datashapes.org/sh/tests/core/node/and-001.test#width"`
-	Height int            `rdf:"http://datashapes.org/sh/tests/core/node/and-001.test#height"`
+	URI    rdft.Resource `rdf:"@id"`
+	Type   rdft.Resource `rdf:"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"`
+	Width  int           `rdf:"http://datashapes.org/sh/tests/core/node/and-001.test#width"`
+	Height int           `rdf:"http://datashapes.org/sh/tests/core/node/and-001.test#height"`
 }
 
 // Example struct representing a ValidationResult from the SHACL test
 type ValidationResult struct {
-	URI                      rdft.Resource   `rdf:"@id"`
-	Type                     rdft.Resource   `rdf:"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"`
-	FocusNode                rdft.Resource   `rdf:"http://www.w3.org/ns/shacl#focusNode"`
-	ResultSeverity           rdft.Resource   `rdf:"http://www.w3.org/ns/shacl#resultSeverity"`
-	SourceConstraintComponent rdft.Resource   `rdf:"http://www.w3.org/ns/shacl#sourceConstraintComponent"`
-	SourceShape              rdft.Resource   `rdf:"http://www.w3.org/ns/shacl#sourceShape"`
-	Value                    rdft.Resource   `rdf:"http://www.w3.org/ns/shacl#value"`
+	URI                       rdft.Resource `rdf:"@id"`
+	Type                      rdft.Resource `rdf:"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"`
+	FocusNode                 rdft.Resource `rdf:"http://www.w3.org/ns/shacl#focusNode"`
+	ResultSeverity            rdft.Resource `rdf:"http://www.w3.org/ns/shacl#resultSeverity"`
+	SourceConstraintComponent rdft.Resource `rdf:"http://www.w3.org/ns/shacl#sourceConstraintComponent"`
+	SourceShape               rdft.Resource `rdf:"http://www.w3.org/ns/shacl#sourceShape"`
+	Value                     rdft.Resource `rdf:"http://www.w3.org/ns/shacl#value"`
 }
 
 // Example struct representing a ValidationReport from the SHACL test
@@ -39,12 +39,12 @@ type ValidationReport struct {
 
 // Example struct representing a TestCase from the SHACL test
 type TestCase struct {
-	URI    rdft.Resource      `rdf:"@id"`
-	Type   rdft.Resource      `rdf:"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"`
+	URI    rdft.Resource     `rdf:"@id"`
+	Type   rdft.Resource     `rdf:"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"`
 	Label  string            `rdf:"http://www.w3.org/2000/01/rdf-schema#label"`
 	Action map[string]string `rdf:"http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#action"`
 	Result *ValidationReport `rdf:"http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#result"`
-	Status rdft.Resource      `rdf:"http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#status"`
+	Status rdft.Resource     `rdf:"http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#status"`
 }
 
 // Example struct representing a Manifest from the SHACL test
@@ -81,8 +81,6 @@ func TestRDFUnmarshalling(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to load graph: %v", err)
 	}
-
-	// We'll remove the debug code as we now understand the URI structure
 
 	// Create an unmarshaller
 	u := rdft.NewUnmarshaller(g)
@@ -171,7 +169,7 @@ func TestRDFUnmarshalling(t *testing.T) {
 
 // Example of a struct with localized text
 type LocalizedExample struct {
-	URI         string            `rdf:"@id"`
+	URI         string               `rdf:"@id"`
 	Title       rdft.LocalizedString `rdf:"http://example.org/title" rdf-type:"localized"`
 	Description *rdft.LocalizedText  `rdf:"http://example.org/description" rdf-type:"localized"`
 }
@@ -185,7 +183,7 @@ type CustomResource struct {
 // UnmarshalRDF implements the RDFUnmarshaler interface
 func (cr *CustomResource) UnmarshalRDF(values []rdft.Value) error {
 	cr.Properties = make(map[string][]rdft.Value)
-	
+
 	// Process all values
 	for _, value := range values {
 		// Extract predicate from the value (this is just an example)
@@ -196,11 +194,11 @@ func (cr *CustomResource) UnmarshalRDF(values []rdft.Value) error {
 				predicate = parts[1]
 			}
 		}
-		
+
 		// Add to properties
 		cr.Properties[predicate] = append(cr.Properties[predicate], value)
 	}
-	
+
 	return nil
 }
 

@@ -85,7 +85,6 @@ func TestDebugRDFGraph(t *testing.T) {
 		}
 	}
 	
-	// Try to find triples with rdfs:label directly
 	fmt.Println("\n=== Direct access to rdfs:label triples ===")
 	rdfsLabel := rdf2go.NewResource("http://www.w3.org/2000/01/rdf-schema#label")
 	// Use a different variable name to avoid shadowing the previous labelTriples

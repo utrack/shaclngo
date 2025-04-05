@@ -23,7 +23,7 @@ func TestW3CTurtleManifestLoading(t *testing.T) {
 
 	// Print some stats
 	t.Logf("Loaded %d tests from W3C Turtle test manifest", len(manifest.Tests))
-	
+
 	// Print the first few tests for verification
 	for i := 0; i < 5 && i < len(manifest.Tests); i++ {
 		test := manifest.Tests[i]
@@ -65,8 +65,6 @@ func TestW3CTurtleBasicTests(t *testing.T) {
 						t.Errorf("Error running test %s: %v", testName, err)
 					} else if !passed {
 						t.Errorf("Test %s failed", testName)
-					} else {
-						t.Logf("Test %s passed", testName)
 					}
 				})
 				break
@@ -94,10 +92,9 @@ func TestW3CTurtleAllTests(t *testing.T) {
 		t.Fatalf("Failed to load manifest: %v", err)
 	}
 
-	// Track test results
-	passed := 0
-	failed := 0
-	errors := 0
+	if len(manifest.Tests) != 291 {
+		t.Fatalf("Expected 291 tests, found %d", len(manifest.Tests))
+	}
 
 	// Run all tests
 	for _, test := range manifest.Tests {
@@ -118,17 +115,9 @@ func TestW3CTurtleAllTests(t *testing.T) {
 			result, err := test.RunTest(manifest.BaseDir)
 			if err != nil {
 				t.Errorf("Error running test %s: %v", test.Name, err)
-				errors++
 			} else if !result {
 				t.Errorf("Test %s failed", test.Name)
-				failed++
-			} else {
-				t.Logf("Test %s passed", test.Name)
-				passed++
 			}
 		})
 	}
-
-	// Print summary
-	t.Logf("W3C Turtle Tests Summary: %d passed, %d failed, %d errors", passed, failed, errors)
 }

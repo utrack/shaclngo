@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 
 	"github.com/deiu/rdf2go"
@@ -11,19 +12,19 @@ import (
 
 // W3CTurtleTest represents a single W3C Turtle test case
 type W3CTurtleTest struct {
-	ID          string // The test ID (e.g., "#IRI_subject")
-	Name        string // The test name
-	Comment     string // The test description
-	Type        string // The test type (e.g., "TestTurtleEval")
-	Approval    string // The approval status
-	ActionFile  string // The Turtle file to test
-	ResultFile  string // The expected output file (usually NT format)
+	ID         string // The test ID (e.g., "#IRI_subject")
+	Name       string // The test name
+	Comment    string // The test description
+	Type       string // The test type (e.g., "TestTurtleEval")
+	Approval   string // The approval status
+	ActionFile string // The Turtle file to test
+	ResultFile string // The expected output file (usually NT format)
 }
 
 // W3CTurtleTestManifest represents the collection of W3C Turtle tests
 type W3CTurtleTestManifest struct {
-	BaseDir string            // Base directory for test files
-	Tests   []*W3CTurtleTest  // List of tests
+	BaseDir string           // Base directory for test files
+	Tests   []*W3CTurtleTest // List of tests
 }
 
 // LoadW3CTurtleTestManifest loads the W3C Turtle test manifest from the specified directory
@@ -39,14 +40,14 @@ func LoadW3CTurtleTestManifest(manifestPath string) (*W3CTurtleTestManifest, err
 	// Create a new graph with the manifest URI as base
 	manifestURI := "file://" + manifestPath
 	graph := rdf2go.NewGraph(manifestURI)
-	
+
 	// Open the file
 	file, err := os.Open(manifestPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open manifest file: %v", err)
 	}
 	defer file.Close()
-	
+
 	// Parse the file
 	err = graph.Parse(file, "text/turtle")
 	if err != nil {
@@ -57,17 +58,17 @@ func LoadW3CTurtleTestManifest(manifestPath string) (*W3CTurtleTestManifest, err
 	typePred := rdf2go.NewResource("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
 	manifestType := rdf2go.NewResource("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#Manifest")
 	entriesNode := rdf2go.NewResource("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#entries")
-	
+
 	// Find all nodes of type mf:Manifest
 	manifestTriples := graph.All(nil, typePred, manifestType)
 	if len(manifestTriples) == 0 {
 		return nil, fmt.Errorf("no manifest node found in the graph")
 	}
-	
+
 	// Use the first manifest node
 	manifestNode := manifestTriples[0].Subject
 	fmt.Printf("Found manifest node: %s\n", manifestNode)
-	
+
 	// Find the entries triple for the manifest node
 	entriesTriples := graph.All(manifestNode, entriesNode, nil)
 	if len(entriesTriples) == 0 {
@@ -80,7 +81,7 @@ func LoadW3CTurtleTestManifest(manifestPath string) (*W3CTurtleTestManifest, err
 
 	// The entries object should be a blank node for a collection
 	var entriesList []rdf2go.Term
-	
+
 	switch node := entriesObj.(type) {
 	case *rdf2go.BlankNode:
 		// This is a blank node, which might be the start of an RDF collection
@@ -104,7 +105,7 @@ func LoadW3CTurtleTestManifest(manifestPath string) (*W3CTurtleTestManifest, err
 		if err != nil {
 			return nil, fmt.Errorf("failed to extract test details for entry %d: %v", i+1, err)
 		}
-		
+
 		// Fix file paths
 		if test.ActionFile != "" {
 			// Convert URI to file path
@@ -113,7 +114,7 @@ func LoadW3CTurtleTestManifest(manifestPath string) (*W3CTurtleTestManifest, err
 			_, actionFileName := filepath.Split(test.ActionFile)
 			test.ActionFile = actionFileName
 		}
-		
+
 		if test.ResultFile != "" {
 			// Convert URI to file path
 			test.ResultFile = strings.TrimPrefix(test.ResultFile, "file://")
@@ -121,11 +122,7 @@ func LoadW3CTurtleTestManifest(manifestPath string) (*W3CTurtleTestManifest, err
 			_, resultFileName := filepath.Split(test.ResultFile)
 			test.ResultFile = resultFileName
 		}
-		
-		fmt.Printf("Test %d: ID=%s, Name=%s, Type=%s\n", i+1, test.ID, test.Name, test.Type)
-		fmt.Printf("  Action: %s\n", test.ActionFile)
-		fmt.Printf("  Result: %s\n", test.ResultFile)
-		
+
 		manifest.Tests = append(manifest.Tests, test)
 	}
 
@@ -183,19 +180,6 @@ func extractTestDetailsFromNode(graph *rdf2go.Graph, testNode rdf2go.Term) (*W3C
 	default:
 		return nil, fmt.Errorf("unexpected node type for test: %T", testNode)
 	}
-
-	// Get all triples for this test
-	var testTriples []*rdf2go.Triple
-	switch node := testNode.(type) {
-	case *rdf2go.Resource:
-		testTriples = graph.All(node, nil, nil)
-	case *rdf2go.BlankNode:
-		testTriples = graph.All(node, nil, nil)
-	default:
-		return nil, fmt.Errorf("unexpected node type for test: %T", testNode)
-	}
-
-	fmt.Printf("  Found %d triples for test %s\n", len(testTriples), testNode)
 
 	// Common predicates
 	typePred := rdf2go.NewResource("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
@@ -266,129 +250,36 @@ func extractTestDetailsFromNode(graph *rdf2go.Graph, testNode rdf2go.Term) (*W3C
 	return test, nil
 }
 
-// extractTestDetails extracts the details of a test from the graph
-func extractTestDetails(graph *rdf2go.Graph, testID string) (*W3CTurtleTest, error) {
-	test := &W3CTurtleTest{
-		ID: testID,
-	}
-
-	// Create the test node
-	testNode := rdf2go.NewResource(testID)
-	
-	// Debug: print all triples for this test
-	testTriples := graph.All(testNode, nil, nil)
-	fmt.Printf("  Found %d triples for test %s\n", len(testTriples), testID)
-	
-	// Limit to at most 5 triples for display
-	maxTriples := 5
-	if len(testTriples) < maxTriples {
-		maxTriples = len(testTriples)
-	}
-	
-	for i := 0; i < maxTriples; i++ {
-		triple := testTriples[i]
-		// Print object type based on its concrete type
-		var objType string
-		switch triple.Object.(type) {
-		case *rdf2go.Resource:
-			objType = "Resource"
-		case *rdf2go.Literal:
-			objType = "Literal"
-		case *rdf2go.BlankNode:
-			objType = "BlankNode"
-		default:
-			objType = "Unknown"
-		}
-		fmt.Printf("    %s %s %s\n", triple.Predicate, objType, triple.Object)
-	}
-
-	// Extract the test type
-	typeNode := rdf2go.NewResource("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
-	typeTriples := graph.All(testNode, typeNode, nil)
-	if len(typeTriples) > 0 {
-		typeURI := typeTriples[0].Object.String()
-		parts := strings.Split(typeURI, "#")
-		if len(parts) > 1 {
-			test.Type = parts[1]
-		} else {
-			test.Type = typeURI
-		}
-	}
-
-	// Extract the test name
-	nameNode := rdf2go.NewResource("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#name")
-	nameTriples := graph.All(testNode, nameNode, nil)
-	if len(nameTriples) > 0 {
-		// Handle literal values
-		switch obj := nameTriples[0].Object.(type) {
-		case *rdf2go.Literal:
-			test.Name = obj.Value
-		default:
-			test.Name = obj.String()
-		}
-	}
-
-	// Extract the test comment
-	commentNode := rdf2go.NewResource("http://www.w3.org/2000/01/rdf-schema#comment")
-	commentTriples := graph.All(testNode, commentNode, nil)
-	if len(commentTriples) > 0 {
-		// Handle literal values
-		switch obj := commentTriples[0].Object.(type) {
-		case *rdf2go.Literal:
-			test.Comment = obj.Value
-		default:
-			test.Comment = obj.String()
-		}
-	}
-
-	// Extract the test approval
-	approvalNode := rdf2go.NewResource("http://www.w3.org/ns/rdftest#approval")
-	approvalTriples := graph.All(testNode, approvalNode, nil)
-	if len(approvalTriples) > 0 {
-		approvalURI := approvalTriples[0].Object.String()
-		parts := strings.Split(approvalURI, "#")
-		if len(parts) > 1 {
-			test.Approval = parts[1]
-		} else {
-			test.Approval = approvalURI
-		}
-	}
-
-	// Extract the action file
-	actionNode := rdf2go.NewResource("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#action")
-	actionTriples := graph.All(testNode, actionNode, nil)
-	if len(actionTriples) > 0 {
-		test.ActionFile = actionTriples[0].Object.String()
-	}
-
-	// Extract the result file
-	resultNode := rdf2go.NewResource("http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#result")
-	resultTriples := graph.All(testNode, resultNode, nil)
-	if len(resultTriples) > 0 {
-		test.ResultFile = resultTriples[0].Object.String()
-	}
-
-	return test, nil
-}
-
 // RunTest runs a single W3C Turtle test
 func (test *W3CTurtleTest) RunTest(baseDir string) (bool, error) {
 	// Check if the files exist
 	actionFilePath := filepath.Join(baseDir, test.ActionFile)
 	resultFilePath := filepath.Join(baseDir, test.ResultFile)
 
-	// Check if the files exist
+	// Check if the action file exists
 	if _, err := os.Stat(actionFilePath); os.IsNotExist(err) {
 		return false, fmt.Errorf("action file not found: %s", actionFilePath)
 	}
 
-	if _, err := os.Stat(resultFilePath); os.IsNotExist(err) {
-		return false, fmt.Errorf("result file not found: %s", resultFilePath)
+	// result file can be empty, but only for PositiveSyntax and NegativeSyntax tests
+	resultFileDescribed := true
+	if test.Type == "TestTurtlePositiveSyntax" || test.Type == "TestTurtleNegativeSyntax" {
+		if test.ResultFile == "" {
+			resultFileDescribed = false
+		}
+	}
+
+	if resultFileDescribed {
+		if _, err := os.Stat(resultFilePath); os.IsNotExist(err) {
+			// If the test type requires a result file but it doesn't exist, report an error
+			return false, fmt.Errorf("result file not found: %s", resultFilePath)
+		}
 	}
 
 	// For negative syntax tests, we expect parsing to fail
 	if test.Type == "TestTurtleNegativeSyntax" {
 		// Try to parse the action file
+
 		actionFile, err := os.Open(actionFilePath)
 		if err != nil {
 			return false, fmt.Errorf("failed to open action file: %v", err)
@@ -410,30 +301,34 @@ func (test *W3CTurtleTest) RunTest(baseDir string) (bool, error) {
 	// For positive tests, we parse both files and compare the results
 	// Parse the action file
 	actionGraph := rdf2go.NewGraph("")
-	
+
 	// Open the action file
 	actionFile, err := os.Open(actionFilePath)
 	if err != nil {
 		return false, fmt.Errorf("failed to open action file: %v", err)
 	}
 	defer actionFile.Close()
-	
+
 	// Parse the file
 	err = actionGraph.Parse(actionFile, "text/turtle")
 	if err != nil {
 		return false, fmt.Errorf("failed to parse action file: %v", err)
 	}
 
+	if !resultFileDescribed {
+		return true, nil
+	}
+
 	// Parse the result file
 	resultGraph := rdf2go.NewGraph("")
-	
+
 	// Open the result file
 	resultFile, err := os.Open(resultFilePath)
 	if err != nil {
 		return false, fmt.Errorf("failed to open result file: %v", err)
 	}
 	defer resultFile.Close()
-	
+
 	// Parse the file - result files are in N-Triples format
 	// Try different MIME types for N-Triples
 	err = resultGraph.Parse(resultFile, "application/n-triples")
@@ -452,37 +347,21 @@ func (test *W3CTurtleTest) RunTest(baseDir string) (bool, error) {
 	}
 
 	// Compare the graphs
-	return compareGraphs(actionGraph, resultGraph)
+	return compareStructGraphs(actionGraph, resultGraph)
 }
 
-// compareGraphs compares two RDF graphs for equality
-func compareGraphs(g1, g2 *rdf2go.Graph) (bool, error) {
-	// Get all triples from both graphs
-	triples1 := g1.All(nil, nil, nil)
-	triples2 := g2.All(nil, nil, nil)
+func compareStructGraphs(g1, g2 *rdf2go.Graph) (bool, error) {
+	var got1, got2 map[string]any
 
-	// Check if the number of triples is the same
-	if len(triples1) != len(triples2) {
-		return false, nil
+	err := NewUnmarshaller(g1).Unmarshal("", &got1)
+	if err != nil {
+		return false, fmt.Errorf("failed to unmarshal action graph: %v", err)
 	}
 
-	// Create a map of triples for faster lookup
-	triplesMap := make(map[string]bool)
-	for _, triple := range triples1 {
-		triplesMap[tripleToString(triple)] = true
+	err = NewUnmarshaller(g2).Unmarshal("", &got2)
+	if err != nil {
+		return false, fmt.Errorf("failed to unmarshal result graph: %v", err)
 	}
 
-	// Check if all triples in g2 are in g1
-	for _, triple := range triples2 {
-		if !triplesMap[tripleToString(triple)] {
-			return false, nil
-		}
-	}
-
-	return true, nil
-}
-
-// tripleToString converts a triple to a string for comparison
-func tripleToString(triple *rdf2go.Triple) string {
-	return fmt.Sprintf("%s %s %s", triple.Subject, triple.Predicate, triple.Object)
+	return reflect.DeepEqual(got1, got2), nil
 }

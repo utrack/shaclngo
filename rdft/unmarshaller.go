@@ -88,9 +88,6 @@ func (u *Unmarshaller) Unmarshal(subject string, v interface{}) error {
 		blankNodeID := strings.TrimPrefix(subject, "_:")
 		subjectTriples = u.graph.All(rdf2go.NewBlankNode(blankNodeID), nil, nil)
 		
-		// Debug information
-		fmt.Printf("Debug: Unmarshalling blank node %s, found %d triples\n", 
-			subject, len(subjectTriples))
 	} else {
 		// This is a resource
 		subjectTriples = u.graph.All(rdf2go.NewResource(subject), nil, nil)
@@ -104,6 +101,23 @@ func (u *Unmarshaller) Unmarshal(subject string, v interface{}) error {
 			predicate := field.Tag.Get("rdf")
 			if predicate != "" {
 				knownPredicates[predicate] = true
+			}
+		}
+	}
+
+	// Check for type assertion if specified
+	for i := 0; i < typ.NumField(); i++ {
+		field := typ.Field(i)
+		predicate := field.Tag.Get("rdf")
+		
+		// Check if this is the @id field and has a rdfType annotation
+		if predicate == "@id" {
+			expectedType := field.Tag.Get("rdfType")
+			if expectedType != "" {
+				// Verify the node has the expected type
+				if err := u.checkNodeType(subject, expectedType); err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -140,9 +154,27 @@ func (u *Unmarshaller) Unmarshal(subject string, v interface{}) error {
 			continue
 		}
 
-		// Handle regular fields
-		if err := u.unmarshalField(subject, predicate, fieldVal); err != nil {
-			return err
+		// Handle @id field specially
+		if predicate == "@id" {
+			// For @id fields, just set the subject URI directly
+			if fieldVal.Kind() == reflect.String {
+				fieldVal.SetString(subject)
+			} else if fieldVal.Type() == reflect.TypeOf(Resource{}) || fieldVal.Type() == reflect.TypeOf(&Resource{}) {
+				// For Resource type
+				res := NewResource(subject)
+				if fieldVal.Type().Kind() == reflect.Ptr {
+					fieldVal.Set(reflect.ValueOf(res))
+				} else {
+					fieldVal.Set(reflect.ValueOf(*res))
+				}
+			} else {
+				return fmt.Errorf("@id field must be string or Resource type, got %s", fieldVal.Type())
+			}
+		} else {
+			// Handle regular fields
+			if err := u.unmarshalField(subject, predicate, fieldVal); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -407,13 +439,8 @@ func (u *Unmarshaller) unmarshalField(subject, predicate string, field reflect.V
 				nil,
 			)
 			
-			// Debug information for blank node detection
-			fmt.Printf("Debug: Checking blank node %s for RDF list properties: first=%d, rest=%d\n", 
-				bn.String(), len(firstTriples), len(restTriples))
-			
 			if len(firstTriples) > 0 && len(restTriples) > 0 {
 				// This is an RDF list
-				fmt.Printf("Debug: Detected RDF list at blank node %s\n", bn.String())
 				if err := u.unmarshalCollection(bn.String(), field); err != nil {
 					return err
 				}

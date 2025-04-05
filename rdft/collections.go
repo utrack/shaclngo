@@ -16,18 +16,12 @@ func (u *Unmarshaller) unmarshalCollection(listURI string, field reflect.Value) 
 	sliceType := field.Type()
 	newSlice := reflect.MakeSlice(sliceType, 0, 8) // Start with a small capacity
 
-	// Debug information
-	fmt.Printf("Debug: Unmarshalling collection at %s into slice of %s\n", 
-		listURI, sliceType.Elem().String())
 
 	// Process the list recursively
 	if err := u.processRDFList(listURI, sliceType.Elem(), &newSlice); err != nil {
 		return err
 	}
 
-	// Debug the result
-	fmt.Printf("Debug: Unmarshalled collection at %s, got %d items\n", 
-		listURI, newSlice.Len())
 
 	// Set the field value
 	field.Set(newSlice)
@@ -111,12 +105,6 @@ func (u *Unmarshaller) processRDFList(listURI string, elemType reflect.Type, sli
 				
 				// Use the blank node ID as the subject for unmarshalling
 				if err := u.Unmarshal(firstObj.String(), newPtr.Interface()); err != nil {
-					// If there's an error, try to debug it
-					fmt.Printf("Debug: Error unmarshalling blank node %s into %s: %v\n", 
-						firstObj.String(), elemType.String(), err)
-					
-					// Print all triples for this blank node
-					fmt.Printf("Debug: All triples for blank node %s:\n", firstObj.String())
 					for _, t := range blankNodeTriples {
 						fmt.Printf("  %s %s %s\n", t.Subject, t.Predicate, t.Object)
 					}
@@ -139,7 +127,6 @@ func (u *Unmarshaller) processRDFList(listURI string, elemType reflect.Type, sli
 				
 				if len(firstNestedTriples) > 0 && len(restNestedTriples) > 0 {
 					// This is a nested RDF list
-					fmt.Printf("Debug: Found nested RDF list at %s\n", firstObj.String())
 					
 					// Create a new slice for the nested list
 					nestedSlice := reflect.MakeSlice(elemType, 0, 8)

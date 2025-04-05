@@ -211,6 +211,14 @@ func guessPrefix(uri string) string {
 	return "ns"
 }
 
+// stripLeadingSlash removes the leading slash from a URI if present
+func stripLeadingSlash(uri string) string {
+	if len(uri) > 0 && uri[0] == '/' {
+		return uri[1:]
+	}
+	return uri
+}
+
 // GetRDFType returns the RDF type of a Go value
 func GetRDFType(v interface{}) string {
 	if v == nil {

@@ -75,11 +75,8 @@ func TestW3CManifestDirectParsing(t *testing.T) {
 		t.Fatalf("Unexpected node type for entries: %T", entriesObj)
 	}
 
-	t.Logf("Found %d entries in the manifest", len(entriesList))
-
-	// If there are no entries, the parsing failed
-	if len(entriesList) == 0 {
-		t.Fatalf("No entries found in the manifest after parsing")
+	if len(entriesList) != 291 {
+		t.Fatalf("Expected 291 entries, found %d", len(entriesList))
 	}
 
 	// Try to extract details for the first few test entries
@@ -102,11 +99,6 @@ func TestW3CManifestDirectParsing(t *testing.T) {
 
 		// Extract test details
 		testDetails := extractTestDetailsForTest(graph, testNode)
-
-		// Print the test details
-		t.Logf("Test %d: ID=%s, Name=%s, Type=%s", i+1, testDetails["id"], testDetails["name"], testDetails["type"])
-		t.Logf("  Action: %s", testDetails["action"])
-		t.Logf("  Result: %s", testDetails["result"])
 
 		// Check if the test files exist
 		actionFile := testDetails["action"]

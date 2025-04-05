@@ -10,20 +10,20 @@ import (
 
 // TestManifestStruct represents the W3C test manifest structure
 type TestManifestStruct struct {
-	URI     string      `rdf:"@id"`
-	Comment string      `rdf:"http://www.w3.org/2000/01/rdf-schema#comment"`
+	URI     string     `rdf:"@id"`
+	Comment string     `rdf:"http://www.w3.org/2000/01/rdf-schema#comment"`
 	Entries []Resource `rdf:"http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#entries"`
 }
 
 // TestEntryStruct represents a single test entry in the manifest
 type TestEntryStruct struct {
-	URI      string    `rdf:"@id"`
-	Type     Resource  `rdf:"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"`
-	Name     string    `rdf:"http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#name"`
-	Comment  string    `rdf:"http://www.w3.org/2000/01/rdf-schema#comment"`
-	Action   Resource  `rdf:"http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#action"`
-	Result   Resource  `rdf:"http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#result"`
-	Approval Resource  `rdf:"http://www.w3.org/ns/rdftest#approval"`
+	URI      string   `rdf:"@id"`
+	Type     Resource `rdf:"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"`
+	Name     string   `rdf:"http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#name"`
+	Comment  string   `rdf:"http://www.w3.org/2000/01/rdf-schema#comment"`
+	Action   Resource `rdf:"http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#action"`
+	Result   Resource `rdf:"http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#result"`
+	Approval Resource `rdf:"http://www.w3.org/ns/rdftest#approval"`
 }
 
 // TestW3CManifestUnmarshalling tests if the rdft unmarshaller can handle the W3C Turtle test manifest
@@ -93,22 +93,15 @@ func TestW3CManifestUnmarshalling(t *testing.T) {
 		t.Fatalf("No entries found in the manifest after unmarshalling")
 	}
 
-	// Try to unmarshal the first few test entries
 	for i := range manifest.Entries {
 		testResource := manifest.Entries[i]
 
-		// Try to unmarshal the test entry
 		testEntry := &TestEntryStruct{}
 		err = u.Unmarshal(testResource.URI, testEntry)
 		if err != nil {
 			t.Fatalf("Failed to unmarshal test entry %s: %v", testResource.URI, err)
 		}
 
-		// Print the test details
-		t.Logf("Test %d: ID=%s, Name=%s, Type=%s", i+1, testEntry.URI, testEntry.Name, testEntry.Type.URI)
-		t.Logf("  Action: %s", testEntry.Action.URI)
-		t.Logf("  Result: %s", testEntry.Result.URI)
-		t.Logf("  Approval: %s", testEntry.Approval.URI)
 	}
 
 	// Try to manually extract test details for the first test
@@ -120,7 +113,6 @@ func TestW3CManifestUnmarshalling(t *testing.T) {
 		testTriples := graph.All(testNode, nil, nil)
 		t.Logf("Found %d triples for test %s", len(testTriples), testResource.URI)
 
-		// Print the first few triples
 		for i := range testTriples {
 			triple := testTriples[i]
 			t.Logf("  Triple %d: %s %s %s", i+1, triple.Predicate, getObjectType(triple.Object), triple.Object)
