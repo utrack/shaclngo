@@ -2,122 +2,118 @@ package shacltest
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/deiu/rdf2go"
-	"github.com/utrack/shaclngo/bitgraph"
+	"github.com/utrack/shaclngo/rdft"
 )
 
+// Namespaces used in the SHACL test suite
+const (
+	RDF      = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+	RDFS     = "http://www.w3.org/2000/01/rdf-schema#"
+	SHACL    = "http://www.w3.org/ns/shacl#"
+	SHACLT   = "http://www.w3.org/ns/shacl-test#"
+	MANIFEST = "http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#"
+)
+
+// Test represents a SHACL validation test
 type Test struct {
-	ID          string
-	Description string
-	Status      string
+	// ID is the URI of the test
+	ID string `rdf:"@id"`
 
-	Action         Action
-	ExpectedResult ResultManifest
+	// Description is the human-readable description of the test
+	Description string `rdf:"http://www.w3.org/2000/01/rdf-schema#label"`
+
+	// Status is the status of the test (e.g., Approved)
+	Status rdft.Resource `rdf:"http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#status"`
+
+	// Action contains the test data and shapes
+	Action *Action `rdf:"http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#action"`
+
+	// ExpectedResult contains the expected validation report
+	ExpectedResult *ValidationReport `rdf:"http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#result"`
 }
 
+// Action represents the test data and shapes
 type Action struct {
-	Data   rdf2go.Term
-	Shapes rdf2go.Term
+	// ID is the URI of the action
+	ID string `rdf:"@id"`
+
+	// Data is the URI of the data graph
+	Data string `rdf:"http://www.w3.org/ns/shacl-test#dataGraph"`
+
+	// Shapes is the URI of the shapes graph
+	Shapes string `rdf:"http://www.w3.org/ns/shacl-test#shapesGraph"`
 }
 
-type ResultManifest struct {
-	Conforms bool
-	Results  []Result
+// ValidationReport represents a SHACL validation report
+type ValidationReport struct {
+	// ID is the URI of the validation report
+	ID string `rdf:"@id" rdfType:"http://www.w3.org/ns/shacl#ValidationReport"`
+
+	// Type is the RDF type of the validation report
+	Type rdft.Resource `rdf:"http://www.w3.org/1999/02/22-rdf-syntax-ns#type"`
+
+	// Conforms indicates whether the data graph conforms to the shapes
+	Conforms bool `rdf:"http://www.w3.org/ns/shacl#conforms"`
+
+	// Results contains the validation results
+	Results []*ValidationResult `rdf:"http://www.w3.org/ns/shacl#result"`
 }
 
-type Result struct {
-	FocusNode                 rdf2go.Term
-	ResultSeverity            rdf2go.Term
-	SourceConstraintComponent rdf2go.Term
-	SourceShape               rdf2go.Term
-	Value                     rdf2go.Term
+// ValidationResult represents a SHACL validation result
+type ValidationResult struct {
+	// ID is the URI of the validation result
+	ID string `rdf:"@id" rdfType:"http://www.w3.org/ns/shacl#ValidationResult"`
+
+	// FocusNode is the node that was validated
+	FocusNode string `rdf:"http://www.w3.org/ns/shacl#focusNode"`
+
+	// ResultSeverity is the severity of the validation result
+	ResultSeverity rdft.Resource `rdf:"http://www.w3.org/ns/shacl#resultSeverity"`
+
+	// SourceConstraintComponent is the constraint component that generated the result
+	SourceConstraintComponent rdft.Resource `rdf:"http://www.w3.org/ns/shacl#sourceConstraintComponent"`
+
+	// SourceShape is the shape that generated the result
+	SourceShape string `rdf:"http://www.w3.org/ns/shacl#sourceShape"`
+
+	// Value is the value that failed validation
+	Value string `rdf:"http://www.w3.org/ns/shacl#value"`
 }
 
-func getTestManifests(g *bitgraph.Graph) []Test {
-	tests := g.Filter(nil, rdf2go.NewResource("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"), rdf2go.NewResource("http://www.w3.org/ns/shacl-test#Validate"))
+// GetTestManifests retrieves all SHACL validation tests from the given graph
+func GetTestManifests(g *rdf2go.Graph) ([]Test, error) {
+	// Create an unmarshaller for the graph
+	unmarshaller := rdft.NewUnmarshaller(g)
 
-	var ret []Test
-	for _, testSubject := range tests {
+	// Find all tests of type Validate
+	testTriples := g.All(
+		nil,
+		rdf2go.NewResource(RDF+"type"),
+		rdf2go.NewResource(SHACLT+"Validate"),
+	)
 
-		t := Test{
-			ID: testSubject.Subject.RawValue(),
+	// Create a slice to hold the tests
+	tests := make([]Test, 0, len(testTriples))
+
+	// Unmarshal each test
+	for _, triple := range testTriples {
+		// Get the test URI
+		testURI := triple.Subject.RawValue()
+
+		// Create a new test
+		var test Test
+
+		// Unmarshal the test
+		err := unmarshaller.Unmarshal(testURI, &test)
+		if err != nil {
+			return nil, fmt.Errorf("failed to unmarshal test %s: %v", testURI, err)
 		}
 
-		tsEntries := g.Filter(testSubject.Subject, nil, nil)
-
-		for _, entry := range tsEntries {
-			switch entry.Predicate.RawValue() {
-			case "http://www.w3.org/2000/01/rdf-schema#label":
-				t.Description = entry.Object.RawValue()
-			case "http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#status":
-				t.Status = strings.TrimPrefix(entry.Object.RawValue(), "http://www.w3.org/ns/shacl-test#")
-			case "http://www.w3.org/1999/02/22-rdf-syntax-ns#type":
-				// type is already filtered, Validate
-			case "http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#action":
-				actionSubj := entry.Object
-				actionEntries := g.Filter(actionSubj, nil, nil)
-				fmt.Println(actionSubj)
-				for _, actionEntry := range actionEntries {
-					switch actionEntry.Predicate.RawValue() {
-					case "http://www.w3.org/ns/shacl-test#shapesGraph":
-						t.Action.Shapes = actionEntry.Object
-					case "http://www.w3.org/ns/shacl-test#dataGraph":
-						t.Action.Data = actionEntry.Object
-					default:
-						fmt.Println("unknown action predicate:", actionEntry.Subject.RawValue(), " -> ", actionEntry.Predicate.RawValue())
-					}
-				}
-			case "http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#result":
-				rManifestSubj := entry.Object
-				rManifestEntries := g.Filter(rManifestSubj, nil, nil)
-				var manifest ResultManifest
-				for _, resultEntry := range rManifestEntries {
-					switch resultEntry.Predicate.RawValue() {
-					case "http://www.w3.org/1999/02/22-rdf-syntax-ns#type":
-						if resultEntry.Object.RawValue() != "http://www.w3.org/ns/shacl#ValidationReport" {
-							fmt.Println("unexpected ValidationReport type:", resultEntry.Subject.RawValue(), " -> ", resultEntry.Object.RawValue())
-						}
-					case "http://www.w3.org/ns/shacl#conforms":
-						manifest.Conforms = resultEntry.Object.RawValue() == "true"
-					case "http://www.w3.org/ns/shacl#result":
-						resultSubj := resultEntry.Object
-						resultEntries := g.Filter(resultSubj, nil, nil)
-						var result Result
-						for _, resultEntry := range resultEntries {
-							switch resultEntry.Predicate.RawValue() {
-							case "http://www.w3.org/1999/02/22-rdf-syntax-ns#type":
-								if resultEntry.Object.RawValue() != "http://www.w3.org/ns/shacl#ValidationResult" {
-									fmt.Println("unexpected result type:", resultEntry.Subject.RawValue(), " -> ", resultEntry.Object.RawValue())
-								}
-							case "http://www.w3.org/ns/shacl#focusNode":
-								result.FocusNode = resultEntry.Object
-							case "http://www.w3.org/ns/shacl#resultSeverity":
-								result.ResultSeverity = resultEntry.Object
-							case "http://www.w3.org/ns/shacl#sourceConstraintComponent":
-								result.SourceConstraintComponent = resultEntry.Object
-							case "http://www.w3.org/ns/shacl#sourceShape":
-								result.SourceShape = resultEntry.Object
-							case "http://www.w3.org/ns/shacl#value":
-								result.Value = resultEntry.Object
-							default:
-								fmt.Println("unknown result predicate:", resultEntry.Subject.RawValue(), " -> ", resultEntry.Predicate.RawValue())
-							}
-						}
-						manifest.Results = append(manifest.Results, result)
-					default:
-						fmt.Println("unknown result manifest predicate:", resultEntry.Subject.RawValue(), " -> ", resultEntry.Predicate.RawValue())
-					}
-				}
-				t.ExpectedResult = manifest
-			default:
-				fmt.Println("unknown predicate:", entry.Predicate.RawValue())
-			}
-		}
-
-		ret = append(ret, t)
+		// Add the test to the slice
+		tests = append(tests, test)
 	}
 
-	return ret
+	return tests, nil
 }

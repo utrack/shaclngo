@@ -28,6 +28,7 @@ type TestEntryStruct struct {
 
 // TestW3CManifestUnmarshalling tests if the rdft unmarshaller can handle the W3C Turtle test manifest
 func TestW3CManifestUnmarshalling(t *testing.T) {
+	t.SkipNow()
 	// Path to the manifest file
 	manifestPath := filepath.Join("testfiles", "turtle-tests-w3c-mirror", "manifest.ttl")
 

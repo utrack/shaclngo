@@ -1,7 +1,6 @@
 package rdft
 
 import (
-	"errors"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -9,6 +8,7 @@ import (
 	"time"
 
 	"github.com/deiu/rdf2go"
+	"github.com/pkg/errors"
 )
 
 // Unmarshaller converts RDF triples to Go structs
@@ -35,17 +35,21 @@ func NewUnmarshaller(graph *rdf2go.Graph, opts ...UnmarshallerOption) *Unmarshal
 	u := &Unmarshaller{
 		graph: graph,
 	}
-	
+
 	// Apply options
 	for _, opt := range opts {
 		opt(u)
 	}
-	
+
 	return u
 }
 
+func (u *Unmarshaller) Unmarshal(subjectURI string, v interface{}) error {
+	return u.unmarshal(rdf2go.NewResource(subjectURI), v)
+}
+
 // Unmarshal unmarshals RDF data into the given Go struct
-func (u *Unmarshaller) Unmarshal(subject string, v interface{}) error {
+func (u *Unmarshaller) unmarshal(subject rdf2go.Term, v interface{}) error {
 	val := reflect.ValueOf(v)
 	if val.Kind() != reflect.Ptr || val.IsNil() {
 		return errors.New("unmarshal target must be a non-nil pointer")
@@ -58,41 +62,21 @@ func (u *Unmarshaller) Unmarshal(subject string, v interface{}) error {
 	if u.implementsRDFUnmarshaler(val) {
 		// Get all triples with the given subject
 		var triples []*rdf2go.Triple
-		
-		// Handle different subject types (resource or blank node)
-		if strings.HasPrefix(subject, "_:") {
-			// This is a blank node
-			blankNodeID := strings.TrimPrefix(subject, "_:")
-			triples = u.graph.All(rdf2go.NewBlankNode(blankNodeID), nil, nil)
-		} else {
-			// This is a resource
-			triples = u.graph.All(rdf2go.NewResource(subject), nil, nil)
-		}
-		
+		triples = u.graph.All(subject, nil, nil)
+
 		// Convert to Values
 		values := make([]Value, 0, len(triples))
 		for _, triple := range triples {
 			values = append(values, FromRDF2GoTerm(triple.Object))
 		}
-		
+
 		// Call UnmarshalRDF
 		return val.Interface().(RDFUnmarshaler).UnmarshalRDF(values)
 	}
 
 	// Get all triples for this subject
-	var subjectTriples []*rdf2go.Triple
-	
-	// Handle different subject types (resource or blank node)
-	if strings.HasPrefix(subject, "_:") {
-		// This is a blank node
-		blankNodeID := strings.TrimPrefix(subject, "_:")
-		subjectTriples = u.graph.All(rdf2go.NewBlankNode(blankNodeID), nil, nil)
-		
-	} else {
-		// This is a resource
-		subjectTriples = u.graph.All(rdf2go.NewResource(subject), nil, nil)
-	}
-	
+	subjectTriples := u.graph.All(subject, nil, nil)
+
 	// If in strict mode, collect all predicates from the struct
 	knownPredicates := make(map[string]bool)
 	if u.StrictMode {
@@ -109,13 +93,13 @@ func (u *Unmarshaller) Unmarshal(subject string, v interface{}) error {
 	for i := 0; i < typ.NumField(); i++ {
 		field := typ.Field(i)
 		predicate := field.Tag.Get("rdf")
-		
+
 		// Check if this is the @id field and has a rdfType annotation
 		if predicate == "@id" {
 			expectedType := field.Tag.Get("rdfType")
 			if expectedType != "" {
 				// Verify the node has the expected type
-				if err := u.checkNodeType(subject, expectedType); err != nil {
+				if err := u.checkNodeType(subjectTriples, expectedType); err != nil {
 					return err
 				}
 			}
@@ -139,15 +123,12 @@ func (u *Unmarshaller) Unmarshal(subject string, v interface{}) error {
 		}
 
 		// Check if field should be treated as localized
-		// Either by explicit tag or by field type
-		rdfType := field.Tag.Get("rdf-type")
 		fieldType := fieldVal.Type()
-		isLocalizedType := fieldType == reflect.TypeOf(LocalizedString{}) || 
-			fieldType == reflect.TypeOf(&LocalizedString{}) || 
-			fieldType == reflect.TypeOf(LocalizedText{}) || 
-			fieldType == reflect.TypeOf(&LocalizedText{})
-		
-		if rdfType == "localized" || isLocalizedType {
+		switch fieldType {
+		case reflect.TypeOf(LocalizedString{}),
+			reflect.TypeOf(&LocalizedString{}),
+			reflect.TypeOf(LocalizedText{}),
+			reflect.TypeOf(&LocalizedText{}):
 			if err := u.unmarshalLocalizedField(subject, predicate, fieldVal); err != nil {
 				return err
 			}
@@ -158,10 +139,10 @@ func (u *Unmarshaller) Unmarshal(subject string, v interface{}) error {
 		if predicate == "@id" {
 			// For @id fields, just set the subject URI directly
 			if fieldVal.Kind() == reflect.String {
-				fieldVal.SetString(subject)
+				fieldVal.SetString(subject.RawValue())
 			} else if fieldVal.Type() == reflect.TypeOf(Resource{}) || fieldVal.Type() == reflect.TypeOf(&Resource{}) {
 				// For Resource type
-				res := NewResource(subject)
+				res := NewResource(subject.RawValue())
 				if fieldVal.Type().Kind() == reflect.Ptr {
 					fieldVal.Set(reflect.ValueOf(res))
 				} else {
@@ -183,11 +164,11 @@ func (u *Unmarshaller) Unmarshal(subject string, v interface{}) error {
 		var unknownPredicates []string
 		for _, triple := range subjectTriples {
 			predURI := triple.Predicate.(*rdf2go.Resource).URI
-			if !knownPredicates[predURI] {
+			if !knownPredicates[predURI] && predURI != "http://www.w3.org/1999/02/22-rdf-syntax-ns#type" {
 				unknownPredicates = append(unknownPredicates, predURI)
 			}
 		}
-		
+
 		if len(unknownPredicates) > 0 {
 			return fmt.Errorf("unknown predicates for subject %s: %v", subject, unknownPredicates)
 		}
@@ -197,18 +178,8 @@ func (u *Unmarshaller) Unmarshal(subject string, v interface{}) error {
 }
 
 // unmarshalField unmarshals a single field
-func (u *Unmarshaller) unmarshalField(subject, predicate string, field reflect.Value) error {
-	// Handle different subject types (resource or blank node)
-	var subjectTerm rdf2go.Term
-	if strings.HasPrefix(subject, "_:") {
-		// This is a blank node
-		blankNodeID := strings.TrimPrefix(subject, "_:")
-		subjectTerm = rdf2go.NewBlankNode(blankNodeID)
-	} else {
-		// This is a resource
-		subjectTerm = rdf2go.NewResource(subject)
-	}
-	
+func (u *Unmarshaller) unmarshalField(subjectTerm rdf2go.Term, predicate string, field reflect.Value) error {
+
 	triples := u.graph.All(
 		subjectTerm,
 		rdf2go.NewResource(predicate),
@@ -228,38 +199,38 @@ func (u *Unmarshaller) unmarshalField(subject, predicate string, field reflect.V
 	case reflect.String:
 		// Check if the object is a resource - if so, this is a type mismatch
 		if _, isResource := objValue.(*Resource); isResource {
-			return fmt.Errorf("type mismatch: cannot unmarshal Resource into string field, use rdft.Resource instead")
+			return errors.Errorf("type mismatch: cannot unmarshal Resource into string field, use rdft.Resource instead: predicate %s", predicate)
 		}
 		field.SetString(objValue.RawValue())
-		
+
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		i, err := strconv.ParseInt(objValue.RawValue(), 10, 64)
 		if err != nil {
 			return fmt.Errorf("cannot convert %s to int: %w", objValue.RawValue(), err)
 		}
 		field.SetInt(i)
-		
+
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		i, err := strconv.ParseUint(objValue.RawValue(), 10, 64)
 		if err != nil {
 			return fmt.Errorf("cannot convert %s to uint: %w", objValue.RawValue(), err)
 		}
 		field.SetUint(i)
-		
+
 	case reflect.Float32, reflect.Float64:
 		f, err := strconv.ParseFloat(objValue.RawValue(), 64)
 		if err != nil {
 			return fmt.Errorf("cannot convert %s to float: %w", objValue.RawValue(), err)
 		}
 		field.SetFloat(f)
-		
+
 	case reflect.Bool:
 		b, err := strconv.ParseBool(objValue.RawValue())
 		if err != nil {
 			return fmt.Errorf("cannot convert %s to bool: %w", objValue.RawValue(), err)
 		}
 		field.SetBool(b)
-		
+
 	case reflect.Map:
 		// Handle map types
 		if field.Type().Key().Kind() == reflect.String && field.Type().Elem().Kind() == reflect.String {
@@ -267,7 +238,7 @@ func (u *Unmarshaller) unmarshalField(subject, predicate string, field reflect.V
 			if field.IsNil() {
 				field.Set(reflect.MakeMap(field.Type()))
 			}
-			
+
 			// Handle different types of objects
 			switch obj := triple.Object.(type) {
 			case *rdf2go.Resource:
@@ -277,12 +248,12 @@ func (u *Unmarshaller) unmarshalField(subject, predicate string, field reflect.V
 					nil,
 					nil,
 				)
-				
+
 				// Add each predicate-object pair to the map
 				for _, t := range resourceTriples {
 					predURI := t.Predicate.(*rdf2go.Resource).URI
 					objVal := FromRDF2GoTerm(t.Object)
-					
+
 					// Use the local part of the predicate URI as the key
 					parts := strings.Split(predURI, "#")
 					key := predURI
@@ -294,10 +265,10 @@ func (u *Unmarshaller) unmarshalField(subject, predicate string, field reflect.V
 							key = parts[len(parts)-1]
 						}
 					}
-					
+
 					field.SetMapIndex(reflect.ValueOf(key), reflect.ValueOf(objVal.RawValue()))
 				}
-				
+
 			case *rdf2go.BlankNode:
 				// For blank nodes, get all predicates and their values
 				resourceTriples := u.graph.All(
@@ -305,12 +276,12 @@ func (u *Unmarshaller) unmarshalField(subject, predicate string, field reflect.V
 					nil,
 					nil,
 				)
-				
+
 				// Add each predicate-object pair to the map
 				for _, t := range resourceTriples {
 					predURI := t.Predicate.(*rdf2go.Resource).URI
 					objVal := FromRDF2GoTerm(t.Object)
-					
+
 					// Use the local part of the predicate URI as the key
 					parts := strings.Split(predURI, "#")
 					key := predURI
@@ -322,19 +293,19 @@ func (u *Unmarshaller) unmarshalField(subject, predicate string, field reflect.V
 							key = parts[len(parts)-1]
 						}
 					}
-					
+
 					field.SetMapIndex(reflect.ValueOf(key), reflect.ValueOf(objVal.RawValue()))
 				}
-				
+
 			default:
 				// For other types, just store the raw value with a default key
 				field.SetMapIndex(reflect.ValueOf("value"), reflect.ValueOf(objValue.RawValue()))
 			}
-			
+
 			return nil
 		}
 		return fmt.Errorf("unsupported map type: %s", field.Type().String())
-		
+
 	case reflect.Struct:
 		// Handle special types like time.Time
 		if field.Type() == reflect.TypeOf(time.Time{}) {
@@ -344,39 +315,18 @@ func (u *Unmarshaller) unmarshalField(subject, predicate string, field reflect.V
 			}
 			field.Set(reflect.ValueOf(t))
 		} else {
-			// For other structs, handle different object types differently
-			switch obj := triple.Object.(type) {
-			case *rdf2go.Resource:
-				// For resources, unmarshal directly
-				newVal := reflect.New(field.Type())
-				if err := u.Unmarshal(obj.URI, newVal.Interface()); err != nil {
-					return err
-				}
-				field.Set(newVal.Elem())
-			
-			case *rdf2go.BlankNode:
-				// For blank nodes, unmarshal the blank node as a subject
-				newVal := reflect.New(field.Type())
-				if err := u.Unmarshal(obj.String(), newVal.Interface()); err != nil {
-					return err
-				}
-				field.Set(newVal.Elem())
-			
-			default:
-				// For other types, try to unmarshal using the raw value
-				newVal := reflect.New(field.Type())
-				if err := u.Unmarshal(objValue.RawValue(), newVal.Interface()); err != nil {
-					return err
-				}
-				field.Set(newVal.Elem())
+			newVal := reflect.New(field.Type())
+			if err := u.unmarshal(triple.Object, newVal.Interface()); err != nil {
+				return err
 			}
+			field.Set(newVal.Elem())
 		}
-		
+
 	case reflect.Ptr:
 		// Create a new instance of the pointed-to type
 		ptrType := field.Type().Elem()
 		newVal := reflect.New(ptrType)
-		
+
 		// Handle different pointed-to types
 		switch ptrType.Kind() {
 		case reflect.String:
@@ -408,16 +358,16 @@ func (u *Unmarshaller) unmarshalField(subject, predicate string, field reflect.V
 				}
 			} else {
 				// For other structs, recursively unmarshal
-				if err := u.Unmarshal(objValue.RawValue(), newVal.Interface()); err != nil {
+				if err := u.unmarshal(triple.Object, newVal.Interface()); err != nil {
 					return err
 				}
 			}
 		default:
 			return fmt.Errorf("unsupported pointer type: %s", ptrType.String())
 		}
-		
+
 		field.Set(newVal)
-		
+
 	case reflect.Slice:
 		// Check if the object is a collection (rdf:List) or container (rdf:Bag, rdf:Seq, rdf:Alt)
 		if res, ok := triple.Object.(*rdf2go.Resource); ok {
@@ -438,7 +388,7 @@ func (u *Unmarshaller) unmarshalField(subject, predicate string, field reflect.V
 				rdf2go.NewResource("http://www.w3.org/1999/02/22-rdf-syntax-ns#rest"),
 				nil,
 			)
-			
+
 			if len(firstTriples) > 0 && len(restTriples) > 0 {
 				// This is an RDF list
 				if err := u.unmarshalCollection(bn.String(), field); err != nil {
@@ -446,20 +396,20 @@ func (u *Unmarshaller) unmarshalField(subject, predicate string, field reflect.V
 				}
 				return nil
 			}
-			
+
 			// If not an RDF list, check if it's an RDF container (Bag, Seq, Alt)
 			containerTypeTriples := u.graph.All(
 				bn,
 				rdf2go.NewResource("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
 				nil,
 			)
-			
+
 			if len(containerTypeTriples) > 0 {
 				if typeRes, ok := containerTypeTriples[0].Object.(*rdf2go.Resource); ok {
 					typeURI := typeRes.URI
 					if typeURI == "http://www.w3.org/1999/02/22-rdf-syntax-ns#Bag" ||
-					   typeURI == "http://www.w3.org/1999/02/22-rdf-syntax-ns#Seq" ||
-					   typeURI == "http://www.w3.org/1999/02/22-rdf-syntax-ns#Alt" {
+						typeURI == "http://www.w3.org/1999/02/22-rdf-syntax-ns#Seq" ||
+						typeURI == "http://www.w3.org/1999/02/22-rdf-syntax-ns#Alt" {
 						// Handle RDF Container
 						if err := u.unmarshalContainer(bn, field); err != nil {
 							return err
@@ -468,7 +418,7 @@ func (u *Unmarshaller) unmarshalField(subject, predicate string, field reflect.V
 					}
 				}
 			}
-			
+
 			// Check if this is a nested structure with multiple properties
 			nestedTriples := u.graph.All(bn, nil, nil)
 			if len(nestedTriples) > 0 {
@@ -476,40 +426,40 @@ func (u *Unmarshaller) unmarshalField(subject, predicate string, field reflect.V
 				if field.Type().Elem().Kind() == reflect.Struct {
 					// Create a new instance of the struct
 					newElem := reflect.New(field.Type().Elem())
-					
+
 					// Unmarshal the nested structure
 					for _, nestedTriple := range nestedTriples {
 						if predRes, ok := nestedTriple.Predicate.(*rdf2go.Resource); ok {
 							predURI := predRes.URI
-							
+
 							// Skip rdf:type predicates
 							if predURI == "http://www.w3.org/1999/02/22-rdf-syntax-ns#type" {
 								continue
 							}
-							
+
 							// Find the field in the struct that matches this predicate
 							structType := field.Type().Elem()
 							structVal := newElem.Elem()
-							
+
 							for i := 0; i < structType.NumField(); i++ {
 								structField := structType.Field(i)
 								structFieldVal := structVal.Field(i)
-								
+
 								// Skip unexported fields
 								if !structFieldVal.CanSet() {
 									continue
 								}
-								
+
 								// Get predicate from tag
 								tagPredicate := structField.Tag.Get("rdf")
 								if tagPredicate == "" {
 									continue
 								}
-								
+
 								if tagPredicate == predURI {
 									// Found a matching field, unmarshal the value
 									objValue := FromRDF2GoTerm(nestedTriple.Object)
-									
+
 									// Set the field value
 									if err := u.setFieldValue(structFieldVal, objValue); err != nil {
 										return err
@@ -518,7 +468,7 @@ func (u *Unmarshaller) unmarshalField(subject, predicate string, field reflect.V
 							}
 						}
 					}
-					
+
 					// Create a new slice with one element
 					newSlice := reflect.MakeSlice(field.Type(), 0, 1)
 					newSlice = reflect.Append(newSlice, newElem.Elem())
@@ -527,17 +477,17 @@ func (u *Unmarshaller) unmarshalField(subject, predicate string, field reflect.V
 				}
 			}
 		}
-		
+
 		// Handle regular slices (multiple values for the same predicate)
 		sliceType := field.Type().Elem()
 		sliceVal := reflect.MakeSlice(field.Type(), 0, len(triples))
-		
+
 		for _, t := range triples {
 			objVal := FromRDF2GoTerm(t.Object)
-			
+
 			// Create and set a new value based on the slice element type
 			var elemVal reflect.Value
-			
+
 			switch sliceType.Kind() {
 			case reflect.String:
 				elemVal = reflect.ValueOf(objVal.RawValue())
@@ -557,7 +507,7 @@ func (u *Unmarshaller) unmarshalField(subject, predicate string, field reflect.V
 				} else {
 					// For other structs, recursively unmarshal
 					newElem := reflect.New(sliceType)
-					if err := u.Unmarshal(objVal.RawValue(), newElem.Interface()); err != nil {
+					if err := u.unmarshal(t.Object, newElem.Interface()); err != nil {
 						return err
 					}
 					elemVal = newElem.Elem()
@@ -565,7 +515,7 @@ func (u *Unmarshaller) unmarshalField(subject, predicate string, field reflect.V
 			case reflect.Ptr:
 				ptrElemType := sliceType.Elem()
 				newElem := reflect.New(ptrElemType)
-				
+
 				if ptrElemType == reflect.TypeOf(Resource{}) {
 					if res, ok := objVal.(*Resource); ok {
 						newElem.Elem().Set(reflect.ValueOf(*res))
@@ -574,53 +524,43 @@ func (u *Unmarshaller) unmarshalField(subject, predicate string, field reflect.V
 					}
 				} else {
 					// For other types, recursively unmarshal
-					if err := u.Unmarshal(objVal.RawValue(), newElem.Interface()); err != nil {
+					if err := u.unmarshal(t.Object, newElem.Interface()); err != nil {
 						return err
 					}
 				}
-				
+
 				elemVal = newElem
 			default:
 				return fmt.Errorf("unsupported slice element type: %s", sliceType.String())
 			}
-			
+
 			sliceVal = reflect.Append(sliceVal, elemVal)
 		}
-		
+
 		field.Set(sliceVal)
-		
+
 	default:
 		return fmt.Errorf("unsupported field type: %s", field.Type().String())
 	}
-	
+
 	return nil
 }
 
 // unmarshalLocalizedField unmarshals a field that contains localized text
-func (u *Unmarshaller) unmarshalLocalizedField(subject, predicate string, field reflect.Value) error {
-	// Handle different subject types (resource or blank node)
-	var subjectTerm rdf2go.Term
-	if strings.HasPrefix(subject, "_:") {
-		// This is a blank node
-		blankNodeID := strings.TrimPrefix(subject, "_:")
-		subjectTerm = rdf2go.NewBlankNode(blankNodeID)
-	} else {
-		// This is a resource
-		subjectTerm = rdf2go.NewResource(subject)
-	}
-	
+func (u *Unmarshaller) unmarshalLocalizedField(subjectTerm rdf2go.Term, predicate string, field reflect.Value) error {
+
 	triples := u.graph.All(
 		subjectTerm,
 		rdf2go.NewResource(predicate),
 		nil,
 	)
-	
+
 	if len(triples) == 0 {
 		return nil // No value to set
 	}
-	
+
 	fieldType := field.Type()
-	
+
 	// Handle LocalizedString (single language)
 	if fieldType == reflect.TypeOf(LocalizedString{}) || fieldType == reflect.TypeOf(&LocalizedString{}) {
 		// Use the first triple
@@ -629,40 +569,40 @@ func (u *Unmarshaller) unmarshalLocalizedField(subject, predicate string, field 
 		if !ok {
 			return fmt.Errorf("expected literal for localized string, got %T", triple.Object)
 		}
-		
+
 		ls := NewLocalizedString(lit.Value, lit.Language)
-		
+
 		if fieldType.Kind() == reflect.Ptr {
 			field.Set(reflect.ValueOf(ls))
 		} else {
 			field.Set(reflect.ValueOf(*ls))
 		}
-		
+
 		return nil
 	}
-	
+
 	// Handle LocalizedText (multiple languages)
 	if fieldType == reflect.TypeOf(LocalizedText{}) || fieldType == reflect.TypeOf(&LocalizedText{}) {
 		lt := NewLocalizedText()
-		
+
 		for _, triple := range triples {
 			lit, ok := triple.Object.(*rdf2go.Literal)
 			if !ok {
 				continue // Skip non-literals
 			}
-			
+
 			lt.Add(lit.Language, lit.Value)
 		}
-		
+
 		if fieldType.Kind() == reflect.Ptr {
 			field.Set(reflect.ValueOf(lt))
 		} else {
 			field.Set(reflect.ValueOf(*lt))
 		}
-		
+
 		return nil
 	}
-	
+
 	return fmt.Errorf("unsupported localized field type: %s", fieldType.String())
 }
 
@@ -670,57 +610,56 @@ func (u *Unmarshaller) unmarshalLocalizedField(subject, predicate string, field 
 func (u *Unmarshaller) implementsRDFUnmarshaler(v reflect.Value) bool {
 	// Get the type of RDFUnmarshaler
 	unmarshalerType := reflect.TypeOf((*RDFUnmarshaler)(nil)).Elem()
-	
+
 	// Check if the value's type implements RDFUnmarshaler
 	return v.Type().Implements(unmarshalerType)
 }
 
-// GetResource retrieves a resource by its URI
-func (u *Unmarshaller) GetResource(uri string, v interface{}) error {
+// UnmarshalResource unmarshals a resource by its URI
+func (u *Unmarshaller) UnmarshalResource(uri string, v interface{}) error {
 	return u.Unmarshal(uri, v)
 }
 
-// GetResources retrieves all resources of a given type
-func (u *Unmarshaller) GetResources(typeURI string, v interface{}) error {
+// UnmarshalResources unmarshals all resources of a given type
+func (u *Unmarshaller) UnmarshalResources(typeURI string, v interface{}) error {
 	// v must be a pointer to a slice
 	val := reflect.ValueOf(v)
 	if val.Kind() != reflect.Ptr || val.IsNil() {
 		return errors.New("target must be a non-nil pointer to a slice")
 	}
-	
+
 	sliceVal := val.Elem()
 	if sliceVal.Kind() != reflect.Slice {
 		return errors.New("target must be a pointer to a slice")
 	}
-	
+
 	// Get the type of the slice elements
 	elemType := sliceVal.Type().Elem()
-	
+
 	// Find all subjects with the given type
 	triples := u.graph.All(nil, rdf2go.NewResource("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"), rdf2go.NewResource(typeURI))
-	
+
 	// Create a new slice with the appropriate capacity
 	newSlice := reflect.MakeSlice(sliceVal.Type(), 0, len(triples))
-	
+
 	// Unmarshal each resource
 	for _, triple := range triples {
-		subject := triple.Subject.(*rdf2go.Resource).URI
-		
+
 		// Create a new element
 		newElem := reflect.New(elemType)
-		
+
 		// Unmarshal the resource
-		if err := u.Unmarshal(subject, newElem.Interface()); err != nil {
+		if err := u.unmarshal(triple.Subject, newElem.Interface()); err != nil {
 			return err
 		}
-		
+
 		// Append to the slice
 		newSlice = reflect.Append(newSlice, newElem.Elem())
 	}
-	
+
 	// Set the slice value
 	sliceVal.Set(newSlice)
-	
+
 	return nil
 }
 
@@ -731,12 +670,12 @@ func (u *Unmarshaller) GetValues(subject, predicate string) []Value {
 		rdf2go.NewResource(predicate),
 		nil,
 	)
-	
+
 	values := make([]Value, 0, len(triples))
 	for _, triple := range triples {
 		values = append(values, FromRDF2GoTerm(triple.Object))
 	}
-	
+
 	return values
 }
 
@@ -792,17 +731,17 @@ func (u *Unmarshaller) GetLocalizedText(subject, predicate string) *LocalizedTex
 		rdf2go.NewResource(predicate),
 		nil,
 	)
-	
+
 	lt := NewLocalizedText()
-	
+
 	for _, triple := range triples {
 		lit, ok := triple.Object.(*rdf2go.Literal)
 		if !ok {
 			continue // Skip non-literals
 		}
-		
+
 		lt.Add(lit.Language, lit.Value)
 	}
-	
+
 	return lt
 }

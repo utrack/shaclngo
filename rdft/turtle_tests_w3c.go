@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 
 	"github.com/deiu/rdf2go"
@@ -351,17 +350,76 @@ func (test *W3CTurtleTest) RunTest(baseDir string) (bool, error) {
 }
 
 func compareStructGraphs(g1, g2 *rdf2go.Graph) (bool, error) {
-	var got1, got2 map[string]any
-
-	err := NewUnmarshaller(g1).Unmarshal("", &got1)
-	if err != nil {
-		return false, fmt.Errorf("failed to unmarshal action graph: %v", err)
+	// Get all triples from both graphs
+	var triples1 []*rdf2go.Triple
+	for triple := range g1.IterTriples() {
+		triples1 = append(triples1, triple)
+	}
+	var triples2 []*rdf2go.Triple
+	for triple := range g2.IterTriples() {
+		triples2 = append(triples2, triple)
 	}
 
-	err = NewUnmarshaller(g2).Unmarshal("", &got2)
-	if err != nil {
-		return false, fmt.Errorf("failed to unmarshal result graph: %v", err)
+	// Check if the number of triples is the same
+	if len(triples1) != len(triples2) {
+		return false, fmt.Errorf("graphs have different number of triples: %d != %d", len(triples1), len(triples2))
 	}
 
-	return reflect.DeepEqual(got1, got2), nil
+	// Create maps of triples for each graph
+	// Use a normalized string representation of each triple as the key
+	triples1Map := make(map[string]bool)
+	for _, triple := range triples1 {
+		triples1Map[normalizeTriple(triple)] = true
+	}
+
+	// Check if all triples in g2 are in g1
+	for _, triple := range triples2 {
+		normalized := normalizeTriple(triple)
+		if !triples1Map[normalized] {
+			return false, fmt.Errorf("triple not found in first graph: %s", normalized)
+		}
+	}
+
+	return true, nil
+}
+
+// normalizeTriple converts a triple to a normalized string representation for comparison
+func normalizeTriple(triple *rdf2go.Triple) string {
+	// Handle different node types appropriately
+	subject := normalizeNode(triple.Subject)
+	predicate := normalizeNode(triple.Predicate)
+	object := normalizeNode(triple.Object)
+
+	return fmt.Sprintf("%s %s %s", subject, predicate, object)
+}
+
+// normalizeNode converts an RDF node to a normalized string representation
+func normalizeNode(node rdf2go.Term) string {
+	if node == nil {
+		return "<nil>"
+	}
+
+	// Use type assertions to handle specific node types
+	// Resource (URI)
+	if res, ok := node.(*rdf2go.Resource); ok {
+		return fmt.Sprintf("<%s>", res.URI)
+	}
+
+	// Blank node
+	if blank, ok := node.(*rdf2go.BlankNode); ok {
+		return fmt.Sprintf("_:%s", blank.ID)
+	}
+
+	// Literal
+	if lit, ok := node.(*rdf2go.Literal); ok {
+		if lit.Datatype != nil {
+			return fmt.Sprintf("\"%s\"^^<%s>", lit.Value, lit.Datatype)
+		} else if lit.Language != "" {
+			return fmt.Sprintf("\"%s\"@%s", lit.Value, lit.Language)
+		}
+		return fmt.Sprintf("\"%s\"", lit.Value)
+	}
+
+	// For any other type, use the String() method from the Term interface
+	return node.String()
 }

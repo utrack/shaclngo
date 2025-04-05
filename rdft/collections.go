@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/deiu/rdf2go"
+	"github.com/utrack/caisson-go/errors"
 )
 
 // unmarshalCollection unmarshals an RDF collection (rdf:List) into a slice
@@ -68,7 +69,7 @@ func (u *Unmarshaller) processRDFList(listURI string, elemType reflect.Type, sli
 		// For literals, just set the value directly
 		firstValue := FromRDF2GoTerm(firstObj)
 		if err := u.setFieldValue(newElem, firstValue); err != nil {
-			return err
+			return errors.Wrapf(err, "failed to set field value for literal %s", firstObj.Value)
 		}
 	
 	case *rdf2go.Resource:
@@ -83,14 +84,14 @@ func (u *Unmarshaller) processRDFList(listURI string, elemType reflect.Type, sli
 			// Unmarshal the resource into the struct
 			newPtr := reflect.New(elemType)
 			if err := u.Unmarshal(firstObj.URI, newPtr.Interface()); err != nil {
-				return err
+				return errors.Wrapf(err, "failed to unmarshal resource %s", firstObj.URI)
 			}
 			newElem.Set(newPtr.Elem())
 		} else {
 			// For non-struct types, just set the value
 			firstValue := FromRDF2GoTerm(firstObj)
 			if err := u.setFieldValue(newElem, firstValue); err != nil {
-				return err
+				return errors.Wrapf(err, "failed to set field value for resource %s", firstObj.URI)
 			}
 		}
 	
@@ -109,7 +110,7 @@ func (u *Unmarshaller) processRDFList(listURI string, elemType reflect.Type, sli
 						fmt.Printf("  %s %s %s\n", t.Subject, t.Predicate, t.Object)
 					}
 					
-					return err
+					return errors.Wrapf(err, "failed to unmarshal blank node %s", firstObj.String())
 				}
 				newElem.Set(newPtr.Elem())
 			} else if elemType.Kind() == reflect.Slice {
@@ -133,7 +134,7 @@ func (u *Unmarshaller) processRDFList(listURI string, elemType reflect.Type, sli
 					
 					// Process the nested list
 					if err := u.processRDFList(firstObj.String(), elemType.Elem(), &nestedSlice); err != nil {
-						return err
+						return errors.Wrapf(err, "failed to process nested RDF list %s", firstObj.String())
 					}
 					
 					// Set the nested slice as the value of the element
@@ -142,21 +143,21 @@ func (u *Unmarshaller) processRDFList(listURI string, elemType reflect.Type, sli
 					// Not a nested list, try to unmarshal as a regular value
 					firstValue := FromRDF2GoTerm(firstObj)
 					if err := u.setFieldValue(newElem, firstValue); err != nil {
-						return err
+						return errors.Wrapf(err, "failed to set field value for first item %s", firstObj.String())
 					}
 				}
 			} else {
 				// For non-struct types, just set the value
 				firstValue := FromRDF2GoTerm(firstObj)
 				if err := u.setFieldValue(newElem, firstValue); err != nil {
-					return err
+					return errors.Wrapf(err, "failed to set field value for non-struct type %s", firstObj.String())
 				}
 			}
 		} else {
 			// For empty blank nodes, just set the value
 			firstValue := FromRDF2GoTerm(firstObj)
 			if err := u.setFieldValue(newElem, firstValue); err != nil {
-				return err
+				return errors.Wrapf(err, "failed to set field value for empty blank node %s", firstObj.String())
 			}
 		}
 	
@@ -164,7 +165,7 @@ func (u *Unmarshaller) processRDFList(listURI string, elemType reflect.Type, sli
 		// For other types, just set the value
 		firstValue := FromRDF2GoTerm(firstTriples[0].Object)
 		if err := u.setFieldValue(newElem, firstValue); err != nil {
-			return err
+			return errors.Wrapf(err, "failed to set field value for other type %s", firstTriples[0].Object.String())
 		}
 	}
 

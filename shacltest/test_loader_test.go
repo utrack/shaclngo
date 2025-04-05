@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"os"
 	"testing"
-
-	"github.com/utrack/shaclngo/bitgraph"
 )
 
 func TestManual(t *testing.T) {
@@ -19,12 +17,7 @@ func TestManual(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	fmt.Println("pre-graph")
-	graph, err := bitgraph.FromRDFGraph(g)
-	if err != nil {
-		t.Fatal(err)
-	}
-	fmt.Println("post-graph")
+	fmt.Println("graph loaded")
 
 	var buf bytes.Buffer
 	err = g.Serialize(&buf, "text/turtle")
@@ -32,9 +25,13 @@ func TestManual(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	fmt.Println("getTestManifests from Test")
+	fmt.Println("GetTestManifests from Test")
 
-	_ = getTestManifests(graph)
+	tests, err := GetTestManifests(g)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Printf("Found %d tests\n", len(tests))
 
 	os.WriteFile("testmanual_result.ttl", buf.Bytes(), 0644)
 
