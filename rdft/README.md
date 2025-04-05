@@ -38,7 +38,7 @@ type Person struct {
     Name      string   `rdf:"http://xmlns.com/foaf/0.1/name"`
     Age       int      `rdf:"http://xmlns.com/foaf/0.1/age"`
     Knows     []string `rdf:"http://xmlns.com/foaf/0.1/knows"`
-    Biography rdft.LocalizedText `rdf:"http://xmlns.com/foaf/0.1/bio" rdf-type:"localized"`
+    Biography rdft.LocalizedText `rdf:"http://xmlns.com/foaf/0.1/bio"`
 }
 
 func main() {
@@ -70,7 +70,6 @@ func main() {
 RDFT uses struct tags to map Go struct fields to RDF predicates:
 
 - `rdf:"<predicate>"`: Specifies the RDF predicate URI for the field
-- `rdf-type:"localized"`: Indicates that the field contains localized text (with language tags)
 
 Special predicates:
 - `@id`: Maps to the resource URI itself
@@ -96,14 +95,14 @@ RDFT provides two types for working with language-tagged strings:
 1. `LocalizedString`: For a single string with a language tag
    ```go
    type Article struct {
-       Title rdft.LocalizedString `rdf:"http://example.org/title" rdf-type:"localized"`
+       Title rdft.LocalizedString `rdf:"http://example.org/title"`
    }
    ```
 
 2. `LocalizedText`: For multiple translations of the same text
    ```go
    type Article struct {
-       Description rdft.LocalizedText `rdf:"http://example.org/description" rdf-type:"localized"`
+       Description rdft.LocalizedText `rdf:"http://example.org/description"`
    }
    
    // Get text in a specific language

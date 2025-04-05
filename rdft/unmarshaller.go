@@ -125,8 +125,15 @@ func (u *Unmarshaller) Unmarshal(subject string, v interface{}) error {
 		}
 
 		// Check if field should be treated as localized
+		// Either by explicit tag or by field type
 		rdfType := field.Tag.Get("rdf-type")
-		if rdfType == "localized" {
+		fieldType := fieldVal.Type()
+		isLocalizedType := fieldType == reflect.TypeOf(LocalizedString{}) || 
+			fieldType == reflect.TypeOf(&LocalizedString{}) || 
+			fieldType == reflect.TypeOf(LocalizedText{}) || 
+			fieldType == reflect.TypeOf(&LocalizedText{})
+		
+		if rdfType == "localized" || isLocalizedType {
 			if err := u.unmarshalLocalizedField(subject, predicate, fieldVal); err != nil {
 				return err
 			}
