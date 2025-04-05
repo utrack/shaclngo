@@ -149,22 +149,6 @@ func TestRDFUnmarshalling(t *testing.T) {
 		t.Errorf("Expected manifest to have entries")
 	}
 
-	// Example 6: Get all values for a predicate
-	values := u.GetValues(testCaseURI, "http://www.w3.org/2000/01/rdf-schema#label")
-	fmt.Printf("Label values: %v\n", values)
-	if len(values) == 0 {
-		t.Errorf("Expected to find label values")
-	}
-
-	// Example 7: Get a string value
-	label, err := u.GetString(testCaseURI, "http://www.w3.org/2000/01/rdf-schema#label")
-	if err != nil {
-		t.Fatalf("Failed to get label: %v", err)
-	}
-	fmt.Printf("Label: %s\n", label)
-	if label != "Test of sh:and at node shape 001" {
-		t.Errorf("Expected label 'Test of sh:and at node shape 001', got '%s'", label)
-	}
 }
 
 // Example of a struct with localized text
@@ -177,18 +161,20 @@ type LocalizedExample struct {
 // Example of a custom unmarshaller
 type CustomResource struct {
 	URI        string
-	Properties map[string][]rdft.Value
+	Properties map[string][]rdf2go.Triple
 }
 
+var _ rdft.RDFUnmarshaler = (*CustomResource)(nil)
+
 // UnmarshalRDF implements the RDFUnmarshaler interface
-func (cr *CustomResource) UnmarshalRDF(values []rdft.Value) error {
-	cr.Properties = make(map[string][]rdft.Value)
+func (cr *CustomResource) UnmarshalRDF(values []*rdf2go.Triple) error {
+	cr.Properties = make(map[string][]rdf2go.Triple)
 
 	// Process all values
 	for _, value := range values {
 		// Extract predicate from the value (this is just an example)
 		predicate := "unknown"
-		if res, ok := value.(*rdft.Resource); ok {
+		if res, ok := value.Predicate.(*rdft.Resource); ok {
 			parts := strings.Split(res.URI, "#")
 			if len(parts) > 1 {
 				predicate = parts[1]
@@ -196,7 +182,7 @@ func (cr *CustomResource) UnmarshalRDF(values []rdft.Value) error {
 		}
 
 		// Add to properties
-		cr.Properties[predicate] = append(cr.Properties[predicate], value)
+		cr.Properties[predicate] = append(cr.Properties[predicate], *value)
 	}
 
 	return nil
