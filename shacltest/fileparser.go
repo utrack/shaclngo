@@ -1,7 +1,6 @@
 package shacltest
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,7 +18,7 @@ func loadGraph(prefix string, path string) (*rdf2go.Graph, error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println("init " + path)
+
 	err = g.Parse(f, "text/turtle")
 	if err != nil {
 		return nil, err

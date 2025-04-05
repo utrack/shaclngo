@@ -1,23 +1,16 @@
 package shacltest
 
-import (
-	"fmt"
+import "github.com/utrack/shaclngo/rdft"
 
-	"github.com/deiu/rdf2go"
-	"github.com/utrack/shaclngo/rdft"
-)
+type Manifest struct {
+	ID string `rdf:"@id" rdfType:"http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#Manifest"`
 
-// Namespaces used in the SHACL test suite
-const (
-	RDF      = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
-	RDFS     = "http://www.w3.org/2000/01/rdf-schema#"
-	SHACL    = "http://www.w3.org/ns/shacl#"
-	SHACLT   = "http://www.w3.org/ns/shacl-test#"
-	MANIFEST = "http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#"
-)
+	// Entries contains the list of tests
+	Entries []ValidationTest `rdf:"http://www.w3.org/2001/sw/DataAccess/tests/test-manifest#entries"`
+}
 
-// Test represents a SHACL validation test
-type Test struct {
+// ValidationTest represents a SHACL validation test
+type ValidationTest struct {
 	// ID is the URI of the test
 	ID string `rdf:"@id"`
 
@@ -40,10 +33,10 @@ type Action struct {
 	ID string `rdf:"@id"`
 
 	// Data is the URI of the data graph
-	Data string `rdf:"http://www.w3.org/ns/shacl-test#dataGraph"`
+	Data rdft.Resource `rdf:"http://www.w3.org/ns/shacl-test#dataGraph"`
 
 	// Shapes is the URI of the shapes graph
-	Shapes string `rdf:"http://www.w3.org/ns/shacl-test#shapesGraph"`
+	Shapes rdft.Resource `rdf:"http://www.w3.org/ns/shacl-test#shapesGraph"`
 }
 
 // ValidationReport represents a SHACL validation report
@@ -67,7 +60,7 @@ type ValidationResult struct {
 	ID string `rdf:"@id" rdfType:"http://www.w3.org/ns/shacl#ValidationResult"`
 
 	// FocusNode is the node that was validated
-	FocusNode string `rdf:"http://www.w3.org/ns/shacl#focusNode"`
+	FocusNode rdft.Resource `rdf:"http://www.w3.org/ns/shacl#focusNode"`
 
 	// ResultSeverity is the severity of the validation result
 	ResultSeverity rdft.Resource `rdf:"http://www.w3.org/ns/shacl#resultSeverity"`
@@ -76,44 +69,8 @@ type ValidationResult struct {
 	SourceConstraintComponent rdft.Resource `rdf:"http://www.w3.org/ns/shacl#sourceConstraintComponent"`
 
 	// SourceShape is the shape that generated the result
-	SourceShape string `rdf:"http://www.w3.org/ns/shacl#sourceShape"`
+	SourceShape rdft.Resource `rdf:"http://www.w3.org/ns/shacl#sourceShape"`
 
 	// Value is the value that failed validation
-	Value string `rdf:"http://www.w3.org/ns/shacl#value"`
-}
-
-// GetTestManifests retrieves all SHACL validation tests from the given graph
-func GetTestManifests(g *rdf2go.Graph) ([]Test, error) {
-	// Create an unmarshaller for the graph
-	unmarshaller := rdft.NewUnmarshaller(g)
-
-	// Find all tests of type Validate
-	testTriples := g.All(
-		nil,
-		rdf2go.NewResource(RDF+"type"),
-		rdf2go.NewResource(SHACLT+"Validate"),
-	)
-
-	// Create a slice to hold the tests
-	tests := make([]Test, 0, len(testTriples))
-
-	// Unmarshal each test
-	for _, triple := range testTriples {
-		// Get the test URI
-		testURI := triple.Subject.RawValue()
-
-		// Create a new test
-		var test Test
-
-		// Unmarshal the test
-		err := unmarshaller.Unmarshal(testURI, &test)
-		if err != nil {
-			return nil, fmt.Errorf("failed to unmarshal test %s: %v", testURI, err)
-		}
-
-		// Add the test to the slice
-		tests = append(tests, test)
-	}
-
-	return tests, nil
+	Value rdft.Resource `rdf:"http://www.w3.org/ns/shacl#value"`
 }
