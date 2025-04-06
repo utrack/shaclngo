@@ -30,6 +30,9 @@ func TestParseManifest(t *testing.T) {
 	so.NotNil(test.Action.DataResource)
 	so.NotNil(test.ExpectedResult)
 
+	so.Len(test.Action.DataObjects, 3)
+	so.Len(test.Action.ShapesObjects, 1)
+
 	so.Equal(false, test.ExpectedResult.Conforms)
 	so.Len(test.ExpectedResult.Results, 2)
 }
