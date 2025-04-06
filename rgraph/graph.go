@@ -10,6 +10,7 @@ import (
 )
 
 type Graph interface {
+	One(subject, predicate, object rdf2go.Term) *rdf2go.Triple
 	All(subject, predicate, object rdf2go.Term) []*rdf2go.Triple
 	LoadURI(uri string) error
 }
@@ -27,7 +28,18 @@ type rdf2goGraph struct {
 }
 
 func (g *rdf2goGraph) All(subject, predicate, object rdf2go.Term) []*rdf2go.Triple {
+	if subject == nil && predicate == nil && object == nil {
+		var ret []*rdf2go.Triple
+		for t := range g.g.IterTriples() {
+			ret = append(ret, t)
+		}
+		return ret
+	}
 	return g.g.All(subject, predicate, object)
+}
+
+func (g *rdf2goGraph) One(subject, predicate, object rdf2go.Term) *rdf2go.Triple {
+	return g.g.One(subject, predicate, object)
 }
 
 func (g *rdf2goGraph) LoadURI(uri string) error {
@@ -35,9 +47,48 @@ func (g *rdf2goGraph) LoadURI(uri string) error {
 	if err != nil {
 		return err
 	}
+	
+	// Add all triples to the graph
 	for _, t := range ts {
 		g.g.AddTriple(t.Subject, t.Predicate, t.Object)
 	}
+	
+	// Create a resource for the file URI
+	fileResource := rdf2go.NewResource(uri)
+	
+	// Create the rdfs:isDefinedBy predicate
+	isDefinedByPredicate := rdf2go.NewResource("http://www.w3.org/2000/01/rdf-schema#isDefinedBy")
+	
+	// Track unique subjects to avoid duplicates
+	processedSubjects := make(map[string]bool)
+	
+	// Find all named resources (subjects) in the loaded triples
+	for _, t := range ts {
+		// Only process resources (not blank nodes or literals)
+		resource, isResource := t.Subject.(*rdf2go.Resource)
+		if !isResource {
+			continue
+		}
+		
+		// Skip if we've already processed this subject
+		subjectStr := resource.String()
+		if _, alreadyProcessed := processedSubjects[subjectStr]; alreadyProcessed {
+			continue
+		}
+		
+		// Check if this resource already has any rdfs:isDefinedBy triple
+		existingDefinitions := g.g.All(resource, isDefinedByPredicate, nil)
+		if len(existingDefinitions) > 0 {
+			// Already has an isDefinedBy link, so skip
+			processedSubjects[subjectStr] = true
+			continue
+		}
+		
+		// Add the rdfs:isDefinedBy link
+		g.g.AddTriple(resource, isDefinedByPredicate, fileResource)
+		processedSubjects[subjectStr] = true
+	}
+	
 	return nil
 }
 
@@ -89,6 +140,7 @@ func NewLoaderFile(prefix string, directory string) Loader {
 
 func (l *loaderFile) LoadURI(uri string) ([]*rdf2go.Triple, error) {
 	unprefixedPath := strings.TrimPrefix(uri, l.prefix)
+
 
 	pathToFile := filepath.Join(l.path, unprefixedPath)
 
