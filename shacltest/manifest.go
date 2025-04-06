@@ -33,10 +33,13 @@ type Action struct {
 	ID string `rdf:"@id"`
 
 	// Data is the URI of the data graph
-	Data rdft.Resource `rdf:"http://www.w3.org/ns/shacl-test#dataGraph"`
+	DataResource rdft.Resource `rdf:"http://www.w3.org/ns/shacl-test#dataGraph"`
+
+	DataObjects []rdft.Resource
 
 	// Shapes is the URI of the shapes graph
-	Shapes rdft.Resource `rdf:"http://www.w3.org/ns/shacl-test#shapesGraph"`
+	ShapesResource rdft.Resource `rdf:"http://www.w3.org/ns/shacl-test#shapesGraph"`
+	ShapesObjects []rdft.Resource
 }
 
 // ValidationReport represents a SHACL validation report

@@ -9,11 +9,12 @@ import (
 
 	"github.com/deiu/rdf2go"
 	"github.com/pkg/errors"
+	"github.com/utrack/shaclngo/rgraph"
 )
 
 // Unmarshaller converts RDF triples to Go structs
 type Unmarshaller struct {
-	graph *rdf2go.Graph
+	graph rgraph.Graph
 	// StrictMode when true will return an error if a subject has predicates
 	// that don't match any field in the target struct
 	StrictMode bool
@@ -31,7 +32,7 @@ func WithStrictMode() UnmarshallerOption {
 }
 
 // NewUnmarshaller creates a new unmarshaller with the given RDF graph
-func NewUnmarshaller(graph *rdf2go.Graph, opts ...UnmarshallerOption) *Unmarshaller {
+func NewUnmarshaller(graph rgraph.Graph, opts ...UnmarshallerOption) *Unmarshaller {
 	u := &Unmarshaller{
 		graph: graph,
 	}

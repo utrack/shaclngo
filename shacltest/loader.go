@@ -4,6 +4,7 @@ import (
 	"github.com/deiu/rdf2go"
 	"github.com/utrack/caisson-go/errors"
 	"github.com/utrack/shaclngo/rdft"
+	"github.com/utrack/shaclngo/rgraph"
 )
 
 // Namespaces used in the SHACL test suite
@@ -16,7 +17,7 @@ const (
 )
 
 // GetTestManifests retrieves all SHACL validation tests from the given graph
-func GetTestManifests(g *rdf2go.Graph) (*Manifest, error) {
+func GetTestManifests(g rgraph.Graph) (*Manifest, error) {
 	// Create an unmarshaller for the graph
 	unmarshaller := rdft.NewUnmarshaller(g)
 
@@ -41,5 +42,10 @@ func GetTestManifests(g *rdf2go.Graph) (*Manifest, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	for i, et := range ret.Entries {
+		ret.Entries[i] = et
+	}
+
 	return ret, nil
 }
